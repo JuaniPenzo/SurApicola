@@ -27,6 +27,7 @@ import { useAlertasStock } from '../hooks/useAlertasStock';
 import { useConfiguracion } from '../hooks/useConfiguracion';
 import { formatearGramos, formatearUnidades, formatearFecha } from '../utils/format';
 import type { MovimientoStockUI } from '../types';
+import type { RangoFiltro } from '../utils/fechas';
 
 // ── Paleta de colores consistente ───────────────────────────────────────────
 const COLORS = {
@@ -63,7 +64,76 @@ function KPICard({ titulo, valor, emoji }: KPICardProps) {
 
 export function StockScreen() {
   const navigation = useNavigation<BottomTabNavigationProp<TabParamList>>();
-  const { stock, movimientos, loading, error, refresh } = useStock();
+  const {
+    stock,
+    movimientos,
+    loading,
+    error,
+    rango,
+    setRango,
+    fechaDesde,
+    fechaHasta,
+    setCustomFechas,
+    refresh,
+  } = useStock();
+
+  const [inputDesde, setInputDesde] = React.useState(fechaDesde);
+  const [inputHasta, setInputHasta] = React.useState(fechaHasta);
+  const [dateError, setDateError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setInputDesde(fechaDesde);
+    setInputHasta(fechaHasta);
+  }, [fechaDesde, fechaHasta]);
+
+  const handleAplicarFiltro = () => {
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+
+    if (!inputDesde || !inputDesde.trim()) {
+      setDateError('Falta ingresar la fecha Desde.');
+      return;
+    }
+    if (!inputHasta || !inputHasta.trim()) {
+      setDateError('Falta ingresar la fecha Hasta.');
+      return;
+    }
+
+    if (!dateRegex.test(inputDesde)) {
+      setDateError('La fecha Desde debe tener el formato AAAA-MM-DD.');
+      return;
+    }
+    if (!dateRegex.test(inputHasta)) {
+      setDateError('La fecha Hasta debe tener el formato AAAA-MM-DD.');
+      return;
+    }
+
+    const d1 = new Date(inputDesde + 'T00:00:00');
+    const d2 = new Date(inputHasta + 'T00:00:00');
+
+    if (isNaN(d1.getTime())) {
+      setDateError('La fecha Desde es inválida.');
+      return;
+    }
+    if (isNaN(d2.getTime())) {
+      setDateError('La fecha Hasta es inválida.');
+      return;
+    }
+
+    if (d1 > d2) {
+      setDateError('La fecha Desde no puede ser mayor que la fecha Hasta.');
+      return;
+    }
+
+    setDateError(null);
+    setCustomFechas(inputDesde, inputHasta);
+  };
+
+  const rangos: { key: RangoFiltro; label: string }[] = [
+    { key: 'hoy', label: 'Hoy' },
+    { key: 'semana', label: 'Semana' },
+    { key: 'mes', label: 'Este mes' },
+    { key: 'entre_fechas', label: 'Entre fechas' },
+  ];
   const { insumos, refresh: refreshInsumos } = useInsumos();
   const { alertas, loading: loadingAlertas, refresh: refreshAlertas } = useAlertasStock();
   const { getMielMinimo, getPanalMinimo, actualizarMielMinimo, actualizarPanalMinimo } = useConfiguracion();
@@ -338,6 +408,61 @@ export function StockScreen() {
       </View>
 
       <Text style={styles.historialTitulo}>HISTORIAL DE MOVIMIENTOS</Text>
+
+      {/* Rango de Fechas Selector */}
+      <View style={styles.rangoContainer}>
+        {rangos.map((r) => (
+          <TouchableOpacity
+            key={r.key}
+            style={[styles.rangoBtn, rango === r.key && styles.rangoBtnActivo]}
+            onPress={() => setRango(r.key)}
+          >
+            <Text style={[styles.rangoBtnTexto, rango === r.key && styles.rangoBtnTextoActivo]}>
+              {r.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Selector de Rango Personalizado */}
+      {rango === 'entre_fechas' && (
+        <View style={styles.customRangoContainerWrapper}>
+          <View style={styles.customRangoContainer}>
+            <View style={styles.customRangoCol}>
+              <Text style={styles.customRangoLabel}>Desde (AAAA-MM-DD)</Text>
+              <TextInput
+                style={[styles.customRangoInput, dateError ? styles.customRangoInputError : null]}
+                value={inputDesde}
+                onChangeText={(val) => {
+                  setInputDesde(val);
+                  setDateError(null);
+                }}
+                placeholder="AAAA-MM-DD"
+                placeholderTextColor={COLORS.textMuted}
+                maxLength={10}
+              />
+            </View>
+            <View style={styles.customRangoCol}>
+              <Text style={styles.customRangoLabel}>Hasta (AAAA-MM-DD)</Text>
+              <TextInput
+                style={[styles.customRangoInput, dateError ? styles.customRangoInputError : null]}
+                value={inputHasta}
+                onChangeText={(val) => {
+                  setInputHasta(val);
+                  setDateError(null);
+                }}
+                placeholder="AAAA-MM-DD"
+                placeholderTextColor={COLORS.textMuted}
+                maxLength={10}
+              />
+            </View>
+          </View>
+          {dateError && <Text style={styles.errorRangoTexto}>{dateError}</Text>}
+          <TouchableOpacity style={styles.btnAplicarFiltro} onPress={handleAplicarFiltro}>
+            <Text style={styles.btnAplicarFiltroTexto}>Aplicar filtro</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Historial o Estado Vacío */}
       <FlatList
@@ -812,5 +937,84 @@ const styles = StyleSheet.create({
     color: COLORS.bg,
     fontWeight: '800',
     fontSize: 15,
+  },
+  rangoContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+    backgroundColor: COLORS.bg,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  rangoBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  rangoBtnActivo: {
+    backgroundColor: COLORS.accent,
+    borderColor: COLORS.accent,
+  },
+  rangoBtnTexto: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: COLORS.textMuted,
+  },
+  rangoBtnTextoActivo: {
+    color: '#000000',
+  },
+  customRangoContainerWrapper: {
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    gap: 10,
+  },
+  customRangoContainer: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  customRangoCol: {
+    flex: 1,
+    gap: 6,
+  },
+  customRangoLabel: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    fontWeight: '600',
+  },
+  customRangoInput: {
+    backgroundColor: COLORS.card,
+    borderColor: COLORS.border,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: COLORS.text,
+    fontSize: 13,
+  },
+  customRangoInputError: {
+    borderColor: COLORS.danger,
+  },
+  btnAplicarFiltro: {
+    backgroundColor: COLORS.accent,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  btnAplicarFiltroTexto: {
+    color: COLORS.bg,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  errorRangoTexto: {
+    color: COLORS.danger,
+    fontSize: 12,
   },
 });

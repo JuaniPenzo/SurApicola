@@ -1,6 +1,3 @@
-// =============================================================================
-// SurApícola — Hook de Compras (Fase 3C)
-// =============================================================================
 import { useCallback, useEffect, useState } from 'react';
 import { useSQLiteContext } from 'expo-sqlite';
 import {
@@ -11,6 +8,7 @@ import {
   CrearCompraInput,
   RegistrarPagoInput,
 } from '../database/compras';
+import { obtenerFechaLocalYMD, obtenerFechasRango, RangoFiltro } from '../utils/fechas';
 
 interface UseComprasResult {
   compras: any[];
@@ -19,6 +17,11 @@ interface UseComprasResult {
   error: string | null;
   search: string;
   setSearch: (text: string) => void;
+  rango: RangoFiltro;
+  setRango: (r: RangoFiltro) => void;
+  fechaDesde: string;
+  fechaHasta: string;
+  setCustomFechas: (desde: string, hasta: string) => void;
   refresh: () => Promise<void>;
   crearCompra: (input: CrearCompraInput) => Promise<void>;
   registrarPago: (compraId: number, input: RegistrarPagoInput) => Promise<void>;
@@ -32,6 +35,11 @@ export function useCompras(): UseComprasResult {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [rango, setRango] = useState<RangoFiltro>('mes');
+
+  const hoyStr = obtenerFechaLocalYMD(new Date());
+  const [fechaDesde, setFechaDesde] = useState<string>(hoyStr);
+  const [fechaHasta, setFechaHasta] = useState<string>(hoyStr);
 
   // ── Cargar Compras ─────────────────────────────────────────────────────────
   const fetchCompras = useCallback(async (isRefresh = false) => {
@@ -42,7 +50,20 @@ export function useCompras(): UseComprasResult {
         setLoading(true);
       }
       setError(null);
-      const res = await getComprasProveedor(db, search);
+
+      let desde = '';
+      let hasta = '';
+
+      if (rango === 'entre_fechas') {
+        desde = fechaDesde;
+        hasta = fechaHasta;
+      } else {
+        const fechas = obtenerFechasRango(rango);
+        desde = fechas.desde;
+        hasta = fechas.hasta;
+      }
+
+      const res = await getComprasProveedor(db, search, desde, hasta);
       setCompras(res);
     } catch (err) {
       console.error('[useCompras] Error al obtener compras:', err);
@@ -52,7 +73,7 @@ export function useCompras(): UseComprasResult {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [db, search]);
+  }, [db, search, rango, fechaDesde, fechaHasta]);
 
   useEffect(() => {
     fetchCompras();
@@ -61,6 +82,11 @@ export function useCompras(): UseComprasResult {
   const refresh = useCallback(async () => {
     await fetchCompras(true);
   }, [fetchCompras]);
+
+  const setCustomFechas = useCallback((desde: string, hasta: string) => {
+    setFechaDesde(desde);
+    setFechaHasta(hasta);
+  }, []);
 
   // ── Crear Compra ───────────────────────────────────────────────────────────
   const crearCompra = useCallback(async (input: CrearCompraInput) => {
@@ -108,6 +134,11 @@ export function useCompras(): UseComprasResult {
     error,
     search,
     setSearch,
+    rango,
+    setRango,
+    fechaDesde,
+    fechaHasta,
+    setCustomFechas,
     refresh,
     crearCompra,
     registrarPago,

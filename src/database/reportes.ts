@@ -3,50 +3,11 @@
 // =============================================================================
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { ReporteGeneral, RangoReporte } from '../types';
+import { obtenerFechaLocalYMD, obtenerFechasRango } from '../utils/fechas';
 
-/**
- * Retorna un string YYYY-MM-DD en hora local de un objeto Date.
- */
-export function obtenerFechaLocalYMD(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const r = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${r}`;
-}
+// Re-exportar para retrocompatibilidad con useReportes
+export { obtenerFechaLocalYMD, obtenerFechasRango };
 
-/**
- * Calcula las fechas de inicio (desde) y fin (hasta) correspondientes a un rango predefinido.
- * Retorna strings en formato YYYY-MM-DD para usar como parámetros SQL (zona horaria local).
- */
-export function obtenerFechasRango(rango: RangoReporte): { desde: string; hasta: string } {
-  const hoy = new Date();
-  const hasta = obtenerFechaLocalYMD(hoy);
-  let desde = hasta;
-
-  switch (rango) {
-    case 'hoy':
-      desde = hasta;
-      break;
-    case 'semana': {
-      const d = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
-      const day = d.getDay(); // 0 is Sunday, 1 is Monday, ..., 6 is Saturday
-      const diffToMonday = day === 0 ? 6 : day - 1;
-      d.setDate(d.getDate() - diffToMonday);
-      desde = obtenerFechaLocalYMD(d);
-      break;
-    }
-    case 'mes': {
-      const d = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-      desde = obtenerFechaLocalYMD(d);
-      break;
-    }
-    case 'entre_fechas':
-      desde = hasta;
-      break;
-  }
-
-  return { desde, hasta };
-}
 
 /**
  * Recupera el reporte general unificado del negocio en base a un rango de fechas.

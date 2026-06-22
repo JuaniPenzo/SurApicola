@@ -41,9 +41,12 @@ export interface RegistrarPagoInput {
  */
 export async function getComprasProveedor(
   db: SQLiteDatabase,
-  search?: string
+  search?: string,
+  desde?: string,
+  hasta?: string
 ): Promise<any[]> {
   const term = search && search.trim().length > 0 ? `%${search.trim()}%` : null;
+  const filtrarFecha = desde && hasta;
 
   const query = `
     SELECT 
@@ -65,15 +68,17 @@ export async function getComprasProveedor(
     FROM compras_proveedor c
     JOIN proveedores p ON c.proveedor_id = p.id
     WHERE 1=1
+      ${filtrarFecha ? 'AND c.fecha BETWEEN ? AND ?' : ''}
       ${term ? 'AND p.nombre LIKE ?' : ''}
     ORDER BY c.fecha DESC, c.id DESC
-    LIMIT 150
+    LIMIT 500
   `;
 
-  if (term) {
-    return await db.getAllAsync<any>(query, [term]);
-  }
-  return await db.getAllAsync<any>(query);
+  const params: any[] = [];
+  if (filtrarFecha) { params.push(desde, hasta); }
+  if (term) { params.push(term); }
+
+  return await db.getAllAsync<any>(query, params);
 }
 
 /**

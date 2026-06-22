@@ -56,10 +56,11 @@ export function formatearFecha(fechaISO: string): string {
   });
 }
 
+import { obtenerFechaLocalYMD } from './fechas';
+
 /**
- * Retorna la fecha actual en formato YYYY-MM-DD (para guardar en SQLite).
+ * Retorna la fecha actual en formato YYYY-MM-DD (para guardar en SQLite) usando hora local.
  */
 export function fechaHoy(): string {
-  const hoy = new Date();
-  return hoy.toISOString().split('T')[0];
+  return obtenerFechaLocalYMD(new Date());
 }

@@ -22,6 +22,8 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useInsumos } from '../hooks/useInsumos';
 import { getPresentacionInsumos, setPresentacionInsumos } from '../database/insumos';
 import type { Insumo, MovimientoInsumo, PresentacionInsumo, TipoOrigenInsumo } from '../types';
+import { obtenerFechaLocalYMD, obtenerFechasRango } from '../utils/fechas';
+import type { RangoFiltro } from '../utils/fechas';
 
 // ---------------------------------------------------------------------------
 // Constantes
@@ -105,6 +107,16 @@ export function EnvasesScreen() {
   const [insumoSeleccionado, setInsumoSeleccionado] = useState<Insumo | null>(null);
   const [movimientos, setMovimientos] = useState<MovimientoInsumo[]>([]);
 
+  // Estados de Filtro de Fechas para Insumos
+  const [rango, setRango] = useState<RangoFiltro>('mes');
+  const hoyStr = obtenerFechaLocalYMD(new Date());
+  const [fechaDesde, setFechaDesde] = useState<string>(hoyStr);
+  const [fechaHasta, setFechaHasta] = useState<string>(hoyStr);
+
+  const [inputDesde, setInputDesde] = useState(hoyStr);
+  const [inputHasta, setInputHasta] = useState(hoyStr);
+  const [dateError, setDateError] = useState<string | null>(null);
+
   // Formulario nuevo/editar insumo
   const [formNombre, setFormNombre] = useState('');
   const [formUnidad, setFormUnidad] = useState('unidad');
@@ -122,16 +134,106 @@ export function EnvasesScreen() {
   // Recargar al enfocar
   useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
 
+  const rangos: { key: RangoFiltro; label: string }[] = [
+    { key: 'hoy', label: 'Hoy' },
+    { key: 'semana', label: 'Semana' },
+    { key: 'mes', label: 'Este mes' },
+    { key: 'entre_fechas', label: 'Entre fechas' },
+  ];
+
+  // Sincronizar inputs personalizados
+  useEffect(() => {
+    setInputDesde(fechaDesde);
+    setInputHasta(fechaHasta);
+  }, [fechaDesde, fechaHasta]);
+
+  // Cargar movimientos de insumo por rango de fechas
+  const cargarMovimientosConFiltro = useCallback(async (insumoId: number, currentRango: RangoFiltro, desdeStr: string, hastaStr: string) => {
+    let desde = '';
+    let hasta = '';
+
+    if (currentRango === 'entre_fechas') {
+      desde = desdeStr;
+      hasta = hastaStr;
+    } else {
+      const fechas = obtenerFechasRango(currentRango);
+      desde = fechas.desde;
+      hasta = fechas.hasta;
+    }
+
+    const movs = await getMovimientos(insumoId, desde, hasta);
+    setMovimientos(movs);
+  }, [getMovimientos]);
+
   // ---------------------------------------------------------------------------
   // Modal: Detalle de Insumo
   // ---------------------------------------------------------------------------
 
   const abrirDetalle = useCallback(async (insumo: Insumo) => {
     setInsumoSeleccionado(insumo);
-    const movs = await getMovimientos(insumo.id);
-    setMovimientos(movs);
+    setRango('mes');
+    const hoy = obtenerFechaLocalYMD(new Date());
+    setFechaDesde(hoy);
+    setFechaHasta(hoy);
+    setInputDesde(hoy);
+    setInputHasta(hoy);
+    setDateError(null);
+    await cargarMovimientosConFiltro(insumo.id, 'mes', hoy, hoy);
     setModalTipo('detalle_insumo');
-  }, [getMovimientos]);
+  }, [cargarMovimientosConFiltro]);
+
+  const handleAplicarFiltro = useCallback(async () => {
+    if (!insumoSeleccionado) return;
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+
+    if (!inputDesde || !inputDesde.trim()) {
+      setDateError('Falta ingresar la fecha Desde.');
+      return;
+    }
+    if (!inputHasta || !inputHasta.trim()) {
+      setDateError('Falta ingresar la fecha Hasta.');
+      return;
+    }
+
+    if (!dateRegex.test(inputDesde)) {
+      setDateError('La fecha Desde debe tener el formato AAAA-MM-DD.');
+      return;
+    }
+    if (!dateRegex.test(inputHasta)) {
+      setDateError('La fecha Hasta debe tener el formato AAAA-MM-DD.');
+      return;
+    }
+
+    const d1 = new Date(inputDesde + 'T00:00:00');
+    const d2 = new Date(inputHasta + 'T00:00:00');
+
+    if (isNaN(d1.getTime())) {
+      setDateError('La fecha Desde es inválida.');
+      return;
+    }
+    if (isNaN(d2.getTime())) {
+      setDateError('La fecha Hasta es inválida.');
+      return;
+    }
+
+    if (d1 > d2) {
+      setDateError('La fecha Desde no puede ser mayor que la fecha Hasta.');
+      return;
+    }
+
+    setDateError(null);
+    setFechaDesde(inputDesde);
+    setFechaHasta(inputHasta);
+    await cargarMovimientosConFiltro(insumoSeleccionado.id, 'entre_fechas', inputDesde, inputHasta);
+  }, [insumoSeleccionado, inputDesde, inputHasta, cargarMovimientosConFiltro]);
+
+  const handleCambiarRango = useCallback(async (newRango: RangoFiltro) => {
+    if (!insumoSeleccionado) return;
+    setRango(newRango);
+    if (newRango !== 'entre_fechas') {
+      await cargarMovimientosConFiltro(insumoSeleccionado.id, newRango, fechaDesde, fechaHasta);
+    }
+  }, [insumoSeleccionado, fechaDesde, fechaHasta, cargarMovimientosConFiltro]);
 
   // ---------------------------------------------------------------------------
   // Modal: Nuevo insumo
@@ -475,7 +577,63 @@ export function EnvasesScreen() {
                 </View>
 
                 <Text style={styles.sectionLabel}>Últimos movimientos</Text>
-                <ScrollView style={{ flex: 1, maxHeight: 280 }} showsVerticalScrollIndicator={false}>
+
+                {/* Rango de Fechas Selector */}
+                <View style={styles.rangoContainer}>
+                  {rangos.map((r) => (
+                    <TouchableOpacity
+                      key={r.key}
+                      style={[styles.rangoBtn, rango === r.key && styles.rangoBtnActivo]}
+                      onPress={() => handleCambiarRango(r.key)}
+                    >
+                      <Text style={[styles.rangoBtnTexto, rango === r.key && styles.rangoBtnTextoActivo]}>
+                        {r.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* Selector de Rango Personalizado */}
+                {rango === 'entre_fechas' && (
+                  <View style={styles.customRangoContainerWrapper}>
+                    <View style={styles.customRangoContainer}>
+                      <View style={styles.customRangoCol}>
+                        <Text style={styles.customRangoLabel}>Desde (AAAA-MM-DD)</Text>
+                        <TextInput
+                          style={[styles.customRangoInput, dateError ? styles.customRangoInputError : null]}
+                          value={inputDesde}
+                          onChangeText={(val) => {
+                            setInputDesde(val);
+                            setDateError(null);
+                          }}
+                          placeholder="AAAA-MM-DD"
+                          placeholderTextColor={COLORS.textMuted}
+                          maxLength={10}
+                        />
+                      </View>
+                      <View style={styles.customRangoCol}>
+                        <Text style={styles.customRangoLabel}>Hasta (AAAA-MM-DD)</Text>
+                        <TextInput
+                          style={[styles.customRangoInput, dateError ? styles.customRangoInputError : null]}
+                          value={inputHasta}
+                          onChangeText={(val) => {
+                            setInputHasta(val);
+                            setDateError(null);
+                          }}
+                          placeholder="AAAA-MM-DD"
+                          placeholderTextColor={COLORS.textMuted}
+                          maxLength={10}
+                        />
+                      </View>
+                    </View>
+                    {dateError && <Text style={styles.errorRangoTexto}>{dateError}</Text>}
+                    <TouchableOpacity style={styles.btnAplicarFiltro} onPress={handleAplicarFiltro}>
+                      <Text style={styles.btnAplicarFiltroTexto}>Aplicar filtro</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                <ScrollView style={{ flex: 1, maxHeight: 220 }} showsVerticalScrollIndicator={false}>
                   {movimientos.length === 0 ? (
                     <Text style={[styles.textMuted, { marginTop: 8 }]}>Sin movimientos registrados.</Text>
                   ) : (
@@ -854,4 +1012,83 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   addInsumoNombre: { color: COLORS.blue, fontSize: 13, fontWeight: '600' },
+  rangoContainer: {
+    flexDirection: 'row',
+    paddingVertical: 10,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  rangoBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: COLORS.surfaceHigh,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  rangoBtnActivo: {
+    backgroundColor: COLORS.accent,
+    borderColor: COLORS.accent,
+  },
+  rangoBtnTexto: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: COLORS.textMuted,
+  },
+  rangoBtnTextoActivo: {
+    color: '#000000',
+  },
+  customRangoContainerWrapper: {
+    backgroundColor: COLORS.surfaceHigh,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 10,
+    marginVertical: 8,
+  },
+  customRangoContainer: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  customRangoCol: {
+    flex: 1,
+    gap: 6,
+  },
+  customRangoLabel: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    fontWeight: '600',
+  },
+  customRangoInput: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: COLORS.text,
+    fontSize: 13,
+  },
+  customRangoInputError: {
+    borderColor: COLORS.red,
+  },
+  btnAplicarFiltro: {
+    backgroundColor: COLORS.accent,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  btnAplicarFiltroTexto: {
+    color: COLORS.bg,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  errorRangoTexto: {
+    color: COLORS.red,
+    fontSize: 12,
+  },
 });

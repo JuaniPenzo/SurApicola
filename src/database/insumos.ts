@@ -154,12 +154,25 @@ export async function registrarMovimientoInsumo(
  */
 export async function getMovimientosInsumo(
   db: SQLiteDatabase,
-  insumoId: number
+  insumoId: number,
+  desde?: string,
+  hasta?: string
 ): Promise<MovimientoInsumo[]> {
-  const rows = await db.getAllAsync<any>(
-    `SELECT * FROM movimientos_insumo WHERE insumo_id = ? ORDER BY fecha DESC, id DESC LIMIT 100`,
-    [insumoId]
-  );
+  const filtrarFecha = desde && hasta;
+  const query = `
+    SELECT * 
+    FROM movimientos_insumo 
+    WHERE insumo_id = ?
+      ${filtrarFecha ? 'AND fecha BETWEEN ? AND ?' : ''}
+    ORDER BY fecha DESC, id DESC 
+    LIMIT 500
+  `;
+  const params: any[] = [insumoId];
+  if (filtrarFecha) {
+    params.push(desde, hasta);
+  }
+
+  const rows = await db.getAllAsync<any>(query, params);
   return rows.map(mapRowToMovimiento);
 }
 

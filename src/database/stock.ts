@@ -42,7 +42,13 @@ export async function getStockActual(db: SQLiteDatabase): Promise<StockActual> {
  * También recupera metadatos adicionales como el nombre del producto vendido
  * o el motivo de pérdida para mayor descriptividad en la UI.
  */
-export async function getMovimientosStock(db: SQLiteDatabase): Promise<MovimientoStockUI[]> {
+export async function getMovimientosStock(
+  db: SQLiteDatabase,
+  desde?: string,
+  hasta?: string
+): Promise<MovimientoStockUI[]> {
+  const filtrarFecha = desde && hasta;
+
   const query = `
     SELECT 
       m.id,
@@ -87,11 +93,16 @@ export async function getMovimientosStock(db: SQLiteDatabase): Promise<Movimient
         ELSE NULL
       END AS perdida_motivo
     FROM movimientos_stock m
+    WHERE 1=1
+      ${filtrarFecha ? 'AND m.fecha BETWEEN ? AND ?' : ''}
     ORDER BY m.fecha DESC, m.id DESC
-    LIMIT 150
+    LIMIT 500
   `;
 
-  const rows = await db.getAllAsync<any>(query);
+  const params: any[] = [];
+  if (filtrarFecha) { params.push(desde, hasta); }
+
+  const rows = await db.getAllAsync<any>(query, params);
 
   return rows.map((r) => ({
     id: r.id,

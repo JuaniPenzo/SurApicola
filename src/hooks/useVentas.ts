@@ -1,6 +1,3 @@
-// =============================================================================
-// SurApícola — Hook de Ventas (Fase 3B)
-// =============================================================================
 import { useCallback, useEffect, useState } from 'react';
 import { useSQLiteContext } from 'expo-sqlite';
 import {
@@ -11,6 +8,7 @@ import {
   CrearVentaInput,
   RegistrarCobroInput,
 } from '../database/ventas';
+import { obtenerFechaLocalYMD, obtenerFechasRango, RangoFiltro } from '../utils/fechas';
 
 interface UseVentasResult {
   ventas: any[];
@@ -19,6 +17,11 @@ interface UseVentasResult {
   error: string | null;
   search: string;
   setSearch: (text: string) => void;
+  rango: RangoFiltro;
+  setRango: (r: RangoFiltro) => void;
+  fechaDesde: string;
+  fechaHasta: string;
+  setCustomFechas: (desde: string, hasta: string) => void;
   refresh: () => Promise<void>;
   crearVenta: (input: CrearVentaInput) => Promise<void>;
   registrarCobro: (ventaId: number, input: RegistrarCobroInput) => Promise<void>;
@@ -32,6 +35,11 @@ export function useVentas(): UseVentasResult {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [rango, setRango] = useState<RangoFiltro>('mes');
+
+  const hoyStr = obtenerFechaLocalYMD(new Date());
+  const [fechaDesde, setFechaDesde] = useState<string>(hoyStr);
+  const [fechaHasta, setFechaHasta] = useState<string>(hoyStr);
 
   // ── Cargar Ventas ──────────────────────────────────────────────────────────
   const fetchVentas = useCallback(async (isRefresh = false) => {
@@ -42,7 +50,20 @@ export function useVentas(): UseVentasResult {
         setLoading(true);
       }
       setError(null);
-      const res = await getVentas(db, search);
+
+      let desde = '';
+      let hasta = '';
+
+      if (rango === 'entre_fechas') {
+        desde = fechaDesde;
+        hasta = fechaHasta;
+      } else {
+        const fechas = obtenerFechasRango(rango);
+        desde = fechas.desde;
+        hasta = fechas.hasta;
+      }
+
+      const res = await getVentas(db, search, desde, hasta);
       setVentas(res);
     } catch (err) {
       console.error('[useVentas] Error al obtener ventas:', err);
@@ -52,7 +73,7 @@ export function useVentas(): UseVentasResult {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [db, search]);
+  }, [db, search, rango, fechaDesde, fechaHasta]);
 
   useEffect(() => {
     fetchVentas();
@@ -61,6 +82,11 @@ export function useVentas(): UseVentasResult {
   const refresh = useCallback(async () => {
     await fetchVentas(true);
   }, [fetchVentas]);
+
+  const setCustomFechas = useCallback((desde: string, hasta: string) => {
+    setFechaDesde(desde);
+    setFechaHasta(hasta);
+  }, []);
 
   // ── Crear Venta ────────────────────────────────────────────────────────────
   const crearVenta = useCallback(async (input: CrearVentaInput) => {
@@ -108,6 +134,11 @@ export function useVentas(): UseVentasResult {
     error,
     search,
     setSearch,
+    rango,
+    setRango,
+    fechaDesde,
+    fechaHasta,
+    setCustomFechas,
     refresh,
     crearVenta,
     registrarCobro,

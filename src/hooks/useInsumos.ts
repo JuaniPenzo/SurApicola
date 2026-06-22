@@ -103,8 +103,8 @@ export function useInsumos() {
   );
 
   const handleGetMovimientos = useCallback(
-    async (insumoId: number): Promise<MovimientoInsumo[]> => {
-      return getMovimientosInsumo(db, insumoId);
+    async (insumoId: number, desde?: string, hasta?: string): Promise<MovimientoInsumo[]> => {
+      return getMovimientosInsumo(db, insumoId, desde, hasta);
     },
     [db]
   );

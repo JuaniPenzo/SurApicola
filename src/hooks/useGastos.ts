@@ -1,6 +1,3 @@
-// =============================================================================
-// SurApícola — Hook de Gastos Operativos (Fase 3D)
-// =============================================================================
 import { useCallback, useEffect, useState } from 'react';
 import { useSQLiteContext } from 'expo-sqlite';
 import {
@@ -11,6 +8,7 @@ import {
   CrearGastoInput,
   RegistrarPagoGastoInput,
 } from '../database/gastos';
+import { obtenerFechaLocalYMD, obtenerFechasRango, RangoFiltro } from '../utils/fechas';
 
 interface UseGastosResult {
   gastos: any[];
@@ -19,6 +17,11 @@ interface UseGastosResult {
   error: string | null;
   search: string;
   setSearch: (text: string) => void;
+  rango: RangoFiltro;
+  setRango: (r: RangoFiltro) => void;
+  fechaDesde: string;
+  fechaHasta: string;
+  setCustomFechas: (desde: string, hasta: string) => void;
   refresh: () => Promise<void>;
   crearGasto: (input: CrearGastoInput) => Promise<void>;
   registrarPago: (gastoId: number, input: RegistrarPagoGastoInput) => Promise<void>;
@@ -32,6 +35,11 @@ export function useGastos(): UseGastosResult {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [rango, setRango] = useState<RangoFiltro>('mes');
+
+  const hoyStr = obtenerFechaLocalYMD(new Date());
+  const [fechaDesde, setFechaDesde] = useState<string>(hoyStr);
+  const [fechaHasta, setFechaHasta] = useState<string>(hoyStr);
 
   // ── Cargar Gastos ──────────────────────────────────────────────────────────
   const fetchGastos = useCallback(async (isRefresh = false) => {
@@ -42,7 +50,20 @@ export function useGastos(): UseGastosResult {
         setLoading(true);
       }
       setError(null);
-      const res = await getGastosOperativos(db, search);
+
+      let desde = '';
+      let hasta = '';
+
+      if (rango === 'entre_fechas') {
+        desde = fechaDesde;
+        hasta = fechaHasta;
+      } else {
+        const fechas = obtenerFechasRango(rango);
+        desde = fechas.desde;
+        hasta = fechas.hasta;
+      }
+
+      const res = await getGastosOperativos(db, search, desde, hasta);
       setGastos(res);
     } catch (err) {
       console.error('[useGastos] Error al obtener gastos:', err);
@@ -52,7 +73,7 @@ export function useGastos(): UseGastosResult {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [db, search]);
+  }, [db, search, rango, fechaDesde, fechaHasta]);
 
   useEffect(() => {
     fetchGastos();
@@ -61,6 +82,11 @@ export function useGastos(): UseGastosResult {
   const refresh = useCallback(async () => {
     await fetchGastos(true);
   }, [fetchGastos]);
+
+  const setCustomFechas = useCallback((desde: string, hasta: string) => {
+    setFechaDesde(desde);
+    setFechaHasta(hasta);
+  }, []);
 
   // ── Crear Gasto ────────────────────────────────────────────────────────────
   const crearGasto = useCallback(async (input: CrearGastoInput) => {
@@ -108,6 +134,11 @@ export function useGastos(): UseGastosResult {
     error,
     search,
     setSearch,
+    rango,
+    setRango,
+    fechaDesde,
+    fechaHasta,
+    setCustomFechas,
     refresh,
     crearGasto,
     registrarPago,

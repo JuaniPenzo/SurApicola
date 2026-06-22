@@ -39,9 +39,12 @@ export async function getCategoriasGasto(db: SQLiteDatabase): Promise<CategoriaG
  */
 export async function getGastosOperativos(
   db: SQLiteDatabase,
-  search?: string
+  search?: string,
+  desde?: string,
+  hasta?: string
 ): Promise<any[]> {
   const term = search && search.trim().length > 0 ? `%${search.trim()}%` : null;
+  const filtrarFecha = desde && hasta;
 
   const query = `
     SELECT 
@@ -64,15 +67,17 @@ export async function getGastosOperativos(
     JOIN categorias_gasto c ON g.categoria_id = c.id
     LEFT JOIN proveedores p ON g.proveedor_id = p.id
     WHERE 1=1
+      ${filtrarFecha ? 'AND g.fecha BETWEEN ? AND ?' : ''}
       ${term ? 'AND (g.descripcion LIKE ? OR g.notas LIKE ? OR c.nombre LIKE ? OR p.nombre LIKE ?)' : ''}
     ORDER BY g.fecha DESC, g.id DESC
-    LIMIT 150
+    LIMIT 500
   `;
 
-  if (term) {
-    return await db.getAllAsync<any>(query, [term, term, term, term]);
-  }
-  return await db.getAllAsync<any>(query);
+  const params: any[] = [];
+  if (filtrarFecha) { params.push(desde, hasta); }
+  if (term) { params.push(term, term, term, term); }
+
+  return await db.getAllAsync<any>(query, params);
 }
 
 /**
