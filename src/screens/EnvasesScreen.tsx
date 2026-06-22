@@ -108,7 +108,7 @@ export function EnvasesScreen() {
   const [movimientos, setMovimientos] = useState<MovimientoInsumo[]>([]);
 
   // Estados de Filtro de Fechas para Insumos
-  const [rango, setRango] = useState<RangoFiltro>('mes');
+  const [rango, setRango] = useState<RangoFiltro>('hoy');
   const hoyStr = obtenerFechaLocalYMD(new Date());
   const [fechaDesde, setFechaDesde] = useState<string>(hoyStr);
   const [fechaHasta, setFechaHasta] = useState<string>(hoyStr);
@@ -171,14 +171,14 @@ export function EnvasesScreen() {
 
   const abrirDetalle = useCallback(async (insumo: Insumo) => {
     setInsumoSeleccionado(insumo);
-    setRango('mes');
+    setRango('hoy');
     const hoy = obtenerFechaLocalYMD(new Date());
     setFechaDesde(hoy);
     setFechaHasta(hoy);
     setInputDesde(hoy);
     setInputHasta(hoy);
     setDateError(null);
-    await cargarMovimientosConFiltro(insumo.id, 'mes', hoy, hoy);
+    await cargarMovimientosConFiltro(insumo.id, 'hoy', hoy, hoy);
     setModalTipo('detalle_insumo');
   }, [cargarMovimientosConFiltro]);
 

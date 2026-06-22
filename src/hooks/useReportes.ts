@@ -22,7 +22,7 @@ export function useReportes(): UseReportesResult {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rango, setRango] = useState<RangoReporte>('mes');
+  const [rango, setRango] = useState<RangoReporte>('hoy');
 
   const hoyStr = obtenerFechaLocalYMD(new Date());
   const [fechaDesde, setFechaDesde] = useState<string>(hoyStr);

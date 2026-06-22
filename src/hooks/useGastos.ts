@@ -35,7 +35,7 @@ export function useGastos(): UseGastosResult {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [rango, setRango] = useState<RangoFiltro>('mes');
+  const [rango, setRango] = useState<RangoFiltro>('hoy');
 
   const hoyStr = obtenerFechaLocalYMD(new Date());
   const [fechaDesde, setFechaDesde] = useState<string>(hoyStr);
