@@ -14,7 +14,6 @@ import {
   ActivityIndicator,
   StatusBar,
   KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -324,7 +323,7 @@ export function PreciosScreen() {
         onRequestClose={cerrarCatModal}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={styles.modalOverlay}
         >
           <View style={styles.modalContent}>
@@ -411,7 +410,7 @@ export function PreciosScreen() {
         onRequestClose={cerrarPrecioModal}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={styles.modalOverlay}
         >
           <View style={styles.modalContent}>

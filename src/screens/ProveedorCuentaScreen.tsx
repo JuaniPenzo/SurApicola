@@ -13,6 +13,8 @@ import {
   TextInput,
   Modal,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
@@ -215,7 +217,14 @@ export function ProveedorCuentaScreen() {
         animationType="fade"
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+          style={styles.modalOverlay}
+        >
+          <ScrollView
+            contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}
+            keyboardShouldPersistTaps="handled"
+          >
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Registrar Pago</Text>
             <Text style={styles.modalSub}>Se imputará a las compras pendientes más antiguas.</Text>
@@ -329,7 +338,8 @@ export function ProveedorCuentaScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

@@ -392,7 +392,9 @@ export function NuevoGastoScreen() {
                 )}
                 ListEmptyComponent={
                   <View style={styles.modalVacioContainer}>
-                    <Text style={styles.modalVacioTexto}>No hay categorías cargadas.</Text>
+                    <Text style={styles.modalVacioTexto}>
+                      No hay categorías activas.{'\n'}Creá una desde{'\n'}⚙️ Configuración → Categorías de Gasto.
+                    </Text>
                   </View>
                 }
               />

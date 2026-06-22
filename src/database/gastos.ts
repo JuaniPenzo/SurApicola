@@ -323,3 +323,31 @@ export async function setCategoriaGastoActiva(db: SQLiteDatabase, id: number, ac
   );
 }
 
+/**
+ * Elimina o desactiva una categoría de gasto.
+ * - Si la categoría nunca fue usada en gastos: la elimina físicamente.
+ * - Si ya tiene gastos asociados: la desactiva (baja lógica) para proteger el histórico.
+ * @returns 'eliminada' si fue borrada físicamente, 'desactivada' si fue dada de baja lógica.
+ */
+export async function eliminarODesactivarCategoriaGasto(
+  db: SQLiteDatabase,
+  id: number
+): Promise<'eliminada' | 'desactivada'> {
+  // Verificar si tiene gastos asociados
+  const usoRow = await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) AS count FROM gastos_operativos WHERE categoria_id = ?',
+    [id]
+  );
+  const count = usoRow?.count ?? 0;
+
+  if (count === 0) {
+    // Sin uso histórico → borrado físico seguro
+    await db.runAsync('DELETE FROM categorias_gasto WHERE id = ?', [id]);
+    return 'eliminada';
+  } else {
+    // Con uso histórico → baja lógica para no romper reportes
+    await db.runAsync('UPDATE categorias_gasto SET activa = 0 WHERE id = ?', [id]);
+    return 'desactivada';
+  }
+}
+

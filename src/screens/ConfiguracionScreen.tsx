@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -20,6 +22,7 @@ import {
   crearCategoriaGasto,
   actualizarCategoriaGasto,
   setCategoriaGastoActiva,
+  eliminarODesactivarCategoriaGasto,
 } from '../database/gastos';
 import type { CategoriaGasto } from '../types';
 
@@ -155,6 +158,33 @@ export function ConfiguracionScreen() {
     setModalCategoriasVisible(true);
   };
 
+  const handleEliminarCategoria = async (id: number, nombre: string) => {
+    Alert.alert(
+      '🗑️ Eliminar Categoría',
+      `¿Qué deseás hacer con "${nombre}"?\n\nSi ya fue usada en gastos, se desactivará (no afecta el historial). Si nunca fue usada, se eliminará permanentemente.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Confirmar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const resultado = await eliminarODesactivarCategoriaGasto(db, id);
+              await cargarCategorias();
+              if (resultado === 'eliminada') {
+                Alert.alert('Eliminada', `La categoría "${nombre}" fue eliminada permanentemente.`);
+              } else {
+                Alert.alert('Desactivada', `La categoría "${nombre}" fue desactivada. Los gastos históricos no se modificaron.`);
+              }
+            } catch (err) {
+              Alert.alert('Error', 'No se pudo eliminar la categoría.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
 
   useEffect(() => {
     cargarDatos();
@@ -256,7 +286,11 @@ export function ConfiguracionScreen() {
         <Text style={styles.headerTitle}>⚙️ Configuración</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} style={styles.scroll}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+        style={{ flex: 1 }}
+      >
+      <ScrollView contentContainerStyle={styles.scrollContent} style={styles.scroll} keyboardShouldPersistTaps="handled">
         {isGlobalLoading && (
           <View style={styles.loadingOverlay}>
             <ActivityIndicator size="large" color={COLORS.accent} />
@@ -430,6 +464,7 @@ export function ConfiguracionScreen() {
           </Text>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* MODAL 1: Confirmación de Restauración */}
       <Modal
@@ -587,6 +622,13 @@ export function ConfiguracionScreen() {
                             <Text style={{ fontSize: 14 }}>
                               {cat.activa === 1 ? '🟢' : '🔴'}
                             </Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={[styles.actionBtnSmall, { backgroundColor: 'rgba(224, 90, 90, 0.12)', borderColor: 'rgba(224, 90, 90, 0.3)' }]}
+                            onPress={() => handleEliminarCategoria(cat.id, cat.nombre)}
+                          >
+                            <Text style={{ fontSize: 14 }}>🗑️</Text>
                           </TouchableOpacity>
                         </View>
                       </View>

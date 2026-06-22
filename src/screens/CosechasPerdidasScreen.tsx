@@ -14,6 +14,8 @@ import {
   ActivityIndicator,
   StatusBar,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -405,7 +407,10 @@ export function CosechasPerdidasScreen() {
         transparent={true}
         onRequestClose={() => setCosechaModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalHeaderTitulo}>Registrar Cosecha</Text>
@@ -417,7 +422,7 @@ export function CosechasPerdidasScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={{ gap: 16 }}>
+            <ScrollView contentContainerStyle={{ gap: 16, paddingBottom: 20 }} keyboardShouldPersistTaps="handled">
               {/* Tipo Stock */}
               <Text style={styles.label}>Tipo de Stock *</Text>
               <View style={styles.tipoRow}>
@@ -497,7 +502,7 @@ export function CosechasPerdidasScreen() {
               </TouchableOpacity>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Modal: Alta Pérdida */}
@@ -507,7 +512,10 @@ export function CosechasPerdidasScreen() {
         transparent={true}
         onRequestClose={() => setPerdidaModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalHeaderTitulo}>Registrar Pérdida</Text>
@@ -519,7 +527,7 @@ export function CosechasPerdidasScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={{ gap: 16 }}>
+            <ScrollView contentContainerStyle={{ gap: 16, paddingBottom: 20 }} keyboardShouldPersistTaps="handled">
               {/* Tipo Stock */}
               <Text style={styles.label}>Tipo de Stock *</Text>
               <View style={styles.tipoRow}>
@@ -611,7 +619,7 @@ export function CosechasPerdidasScreen() {
               </TouchableOpacity>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
     </SafeAreaView>
