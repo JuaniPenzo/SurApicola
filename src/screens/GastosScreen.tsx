@@ -20,10 +20,17 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { TabParamList } from '../navigation/AppNavigator';
 import { useGastos } from '../hooks/useGastos';
-import { getGastoById } from '../database/gastos';
+import {
+  getGastoById,
+  getAllCategoriasGasto,
+  crearCategoriaGasto,
+  actualizarCategoriaGasto,
+  setCategoriaGastoActiva,
+  eliminarODesactivarCategoriaGasto,
+} from '../database/gastos';
 import { useSQLiteContext } from 'expo-sqlite';
 import { formatearDinero, formatearFecha, fechaHoy } from '../utils/format';
-import type { MedioPago, EstadoGasto } from '../types';
+import type { MedioPago, EstadoGasto, CategoriaGasto } from '../types';
 import type { RangoFiltro } from '../utils/fechas';
 
 const COLORS = {
@@ -55,7 +62,6 @@ export function GastosScreen() {
     fechaHasta,
     setCustomFechas,
     refresh,
-    registrarPago,
     anularGasto,
   } = useGastos();
 
@@ -117,16 +123,116 @@ export function GastosScreen() {
     { key: 'entre_fechas', label: 'Entre fechas' },
   ];
 
-  // ── Estados de Detalle y Formulario de Pago ────────────────────────────────
+  // ── Estados de Detalle y Categorías ────────────────────────────────────────
   const [selectedGasto, setSelectedGasto] = useState<any | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
-  const [pagoModalVisible, setPagoModalVisible] = useState(false);
 
-  // Campos del Pago
-  const [montoPago, setMontoPago] = useState('');
-  const [medioPago, setMedioPago] = useState<MedioPago>('efectivo');
-  const [fechaPago, setFechaPago] = useState(fechaHoy());
-  const [notasPago, setNotasPago] = useState('');
+  // Estados de Categorías de Gasto
+  const [modalCategoriasVisible, setModalCategoriasVisible] = useState(false);
+  const [categoriasGasto, setCategoriasGasto] = useState<CategoriaGasto[]>([]);
+  const [nuevaCategoriaNombre, setNuevaCategoriaNombre] = useState('');
+  const [editandoCategoriaId, setEditandoCategoriaId] = useState<number | null>(null);
+  const [editandoCategoriaNombre, setEditandoCategoriaNombre] = useState('');
+
+  const cargarCategorias = async () => {
+    try {
+      const list = await getAllCategoriasGasto(db);
+      setCategoriasGasto(list);
+    } catch (err) {
+      console.error('[GastosScreen] Error al cargar categorías:', err);
+    }
+  };
+
+  const handleCrearCategoria = async () => {
+    const trimmed = nuevaCategoriaNombre.trim();
+    if (trimmed === '') {
+      Alert.alert('Validación', 'El nombre de la categoría no puede estar vacío.');
+      return;
+    }
+    try {
+      await crearCategoriaGasto(db, trimmed);
+      setNuevaCategoriaNombre('');
+      await cargarCategorias();
+      Alert.alert('Éxito', 'Categoría de gasto creada correctamente.');
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'No se pudo crear la categoría.');
+    }
+  };
+
+  const handleGuardarEdicion = async (id: number) => {
+    const trimmed = editandoCategoriaNombre.trim();
+    if (trimmed === '') {
+      Alert.alert('Validación', 'El nombre de la categoría no puede estar vacío.');
+      return;
+    }
+    try {
+      await actualizarCategoriaGasto(db, id, trimmed);
+      setEditandoCategoriaId(null);
+      setEditandoCategoriaNombre('');
+      await cargarCategorias();
+      Alert.alert('Éxito', 'Categoría de gasto actualizada correctamente.');
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'No se pudo actualizar la categoría.');
+    }
+  };
+
+  const handleToggleActiva = async (id: number, activaActual: 0 | 1) => {
+    const nuevoEstado = activaActual === 1 ? 0 : 1;
+    const mensaje = nuevoEstado === 0 
+      ? '¿Deseás desactivar esta categoría? No aparecerá para nuevos gastos, pero los existentes mantendrán su nombre.' 
+      : '¿Deseás activar esta categoría?';
+    
+    Alert.alert(
+      nuevoEstado === 0 ? 'Desactivar Categoría' : 'Activar Categoría',
+      mensaje,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Confirmar',
+          onPress: async () => {
+            try {
+              await setCategoriaGastoActiva(db, id, nuevoEstado);
+              await cargarCategorias();
+            } catch (err) {
+              Alert.alert('Error', 'No se pudo cambiar el estado de la categoría.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const abrirGestionCategorias = async () => {
+    await cargarCategorias();
+    setModalCategoriasVisible(true);
+  };
+
+  const handleEliminarCategoria = async (id: number, nombre: string) => {
+    Alert.alert(
+      '🗑️ Eliminar Categoría',
+      `¿Qué deseás hacer con "${nombre}"?\n\nSi ya fue usada en gastos, se desactivará (no afecta el historial). Si nunca fue usada, se eliminará permanentemente.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Confirmar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const resultado = await eliminarODesactivarCategoriaGasto(db, id);
+              await cargarCategorias();
+              if (resultado === 'eliminada') {
+                Alert.alert('Eliminada', `La categoría "${nombre}" fue eliminada permanentemente.`);
+              } else {
+                Alert.alert('Desactivada', `La categoría "${nombre}" fue desactivada. Los gastos históricos no se modificaron.`);
+              }
+            } catch (err) {
+              Alert.alert('Error', 'No se pudo eliminar la categoría.');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   // Recargar al enfocar pantalla
   useFocusEffect(
@@ -152,49 +258,6 @@ export function GastosScreen() {
   const cerrarDetalles = () => {
     setDetailModalVisible(false);
     setSelectedGasto(null);
-  };
-
-  // ── Registrar Pago posterior ───────────────────────────────────────────────
-  const abrirFormularioPago = () => {
-    if (!selectedGasto) return;
-    const saldo = selectedGasto.total_centavos - obtenerTotalPagado(selectedGasto);
-    setMontoPago((saldo / 100).toString());
-    setMedioPago('efectivo');
-    setFechaPago(fechaHoy());
-    setNotasPago('');
-    setPagoModalVisible(true);
-  };
-
-  const handleGuardarPago = async () => {
-    if (!selectedGasto) return;
-    const montoCentavos = Math.round(parseFloat(montoPago) * 100);
-    const saldo = selectedGasto.total_centavos - obtenerTotalPagado(selectedGasto);
-
-    if (isNaN(montoCentavos) || montoCentavos <= 0) {
-      Alert.alert('Validación', 'El monto a pagar debe ser un número positivo.');
-      return;
-    }
-    if (montoCentavos > saldo) {
-      Alert.alert('Validación', `El monto no puede superar el saldo pendiente ($${saldo / 100}).`);
-      return;
-    }
-
-    try {
-      await registrarPago(selectedGasto.id, {
-        monto_centavos: montoCentavos,
-        medio_pago: medioPago,
-        fecha: fechaPago,
-        notas: notasPago.trim() || null,
-      });
-
-      // Refrescar modal de detalles
-      const updated = await getGastoById(db, selectedGasto.id);
-      setSelectedGasto(updated);
-      setPagoModalVisible(false);
-      Alert.alert('Éxito', 'El pago se registró correctamente.');
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'No se pudo guardar el pago.');
-    }
   };
 
   // ── Anular Gasto ───────────────────────────────────────────────────────────
@@ -267,11 +330,6 @@ export function GastosScreen() {
         <View style={styles.metaRow}>
           <Text style={styles.gastoFecha}>{formatearFecha(item.fecha)}</Text>
           <Text style={styles.gastoCategoria}>• {item.categoria_nombre}</Text>
-          {item.proveedor_nombre ? (
-            <Text style={styles.gastoProveedor} numberOfLines={1}>
-              • Prov: {item.proveedor_nombre}
-            </Text>
-          ) : null}
         </View>
 
         <View style={styles.cardValores}>
@@ -320,19 +378,28 @@ export function GastosScreen() {
           <Text style={styles.headerTitulo}>📤 Gastos Operativos</Text>
           <Text style={styles.headerSubtitulo}>Gastos operativos del negocio</Text>
         </View>
-        <TouchableOpacity
-          style={styles.btnNuevo}
-          activeOpacity={0.8}
-          onPress={() => navigation.navigate('NuevoGasto')}
-        >
-          <Text style={styles.btnNuevoTexto}>Nuevo gasto</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity
+            style={[styles.btnNuevo, { backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.border }]}
+            activeOpacity={0.8}
+            onPress={abrirGestionCategorias}
+          >
+            <Text style={[styles.btnNuevoTexto, { color: COLORS.text }]}>Categorías 🏷️</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.btnNuevo}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('NuevoGasto')}
+          >
+            <Text style={styles.btnNuevoTexto}>Nuevo</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Advertencia Gastos vs Compras */}
       <View style={styles.advertenciaBanner}>
         <Text style={styles.advertenciaTexto}>
-          ℹ️ Las compras de miel, panal y envases se cargan desde el módulo de Compras, no desde Gastos.
+          ℹ️ Los gastos son egresos operativos. Las compras de miel, panal, envases o insumos deben cargarse desde Compras.
         </Text>
       </View>
 
@@ -347,7 +414,7 @@ export function GastosScreen() {
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Buscar por descripción, categoría, proveedor..."
+          placeholder="Buscar por descripción o categoría..."
           placeholderTextColor={COLORS.textMuted}
           value={search}
           onChangeText={setSearch}
@@ -462,13 +529,6 @@ export function GastosScreen() {
                     <Text style={[styles.detailLabel, { marginTop: 12 }]}>Categoría</Text>
                     <Text style={styles.detailValue}>{selectedGasto.categoria_nombre}</Text>
 
-                    {selectedGasto.proveedor_nombre && (
-                      <>
-                        <Text style={[styles.detailLabel, { marginTop: 12 }]}>Proveedor</Text>
-                        <Text style={styles.detailValue}>{selectedGasto.proveedor_nombre}</Text>
-                      </>
-                    )}
-
                     <Text style={[styles.detailLabel, { marginTop: 12 }]}>Fecha</Text>
                     <Text style={styles.detailValue}>{formatearFecha(selectedGasto.fecha)}</Text>
 
@@ -516,31 +576,10 @@ export function GastosScreen() {
                         {formatearDinero(obtenerTotalPagado(selectedGasto))}
                       </Text>
                     </View>
-                    {selectedGasto.total_centavos - obtenerTotalPagado(selectedGasto) > 0 &&
-                      selectedGasto.estado !== 'anulado' && (
-                        <View style={styles.resumenFila}>
-                          <Text style={styles.resumenLabel}>Saldo Pendiente:</Text>
-                          <Text style={[styles.resumenValor, { color: COLORS.accentLight }]}>
-                            {formatearDinero(
-                              selectedGasto.total_centavos - obtenerTotalPagado(selectedGasto)
-                            )}
-                          </Text>
-                        </View>
-                      )}
                   </View>
 
                   {/* Botones de Acción */}
                   <View style={styles.modalAcciones}>
-                    {selectedGasto.estado !== 'anulado' &&
-                      selectedGasto.total_centavos - obtenerTotalPagado(selectedGasto) > 0 && (
-                        <TouchableOpacity
-                          style={[styles.modalBtn, styles.modalBtnPago]}
-                          onPress={abrirFormularioPago}
-                        >
-                          <Text style={styles.modalBtnPagoTexto}>💰 Registrar Pago</Text>
-                        </TouchableOpacity>
-                      )}
-
                     {selectedGasto.estado !== 'anulado' && (
                       <TouchableOpacity
                         style={[styles.modalBtn, styles.modalBtnAnular]}
@@ -557,82 +596,114 @@ export function GastosScreen() {
         </View>
       </Modal>
 
-      {/* Sub-Modal: Registrar Pago Posterior */}
+      {/* Modal: Gestión de Categorías de Gasto */}
       <Modal
-        visible={pagoModalVisible}
+        visible={modalCategoriasVisible}
+        transparent
         animationType="slide"
-        transparent={true}
-        onRequestClose={() => setPagoModalVisible(false)}
+        onRequestClose={() => setModalCategoriasVisible(false)}
       >
-        <View style={styles.subModalOverlay}>
-          <View style={styles.subModalContent}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '85%' }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalHeaderTitulo}>Registrar Pago</Text>
-              <TouchableOpacity
-                onPress={() => setPagoModalVisible(false)}
-                style={styles.modalCerrarBtn}
-              >
+              <Text style={styles.modalHeaderTitulo}>🏷️ Categorías de Gasto</Text>
+              <TouchableOpacity onPress={() => setModalCategoriasVisible(false)} style={styles.modalCerrarBtn}>
                 <Text style={styles.modalCerrarBtnTexto}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={{ gap: 16 }}>
-              <View style={{ gap: 6 }}>
-                <Text style={styles.label}>Monto a pagar (ARS)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={montoPago}
-                  onChangeText={setMontoPago}
-                  keyboardType="numeric"
-                />
-              </View>
+            <Text style={styles.modalDesc}>
+              Agregá o modificá las categorías que usás para catalogar tus gastos operativos.
+            </Text>
 
-              <View style={{ gap: 6 }}>
-                <Text style={styles.label}>Medio de Pago</Text>
-                <View style={styles.medioPagoRow}>
-                  {(['efectivo', 'transferencia', 'otro'] as MedioPago[]).map((medio) => (
-                    <TouchableOpacity
-                      key={medio}
-                      style={[
-                        styles.medioBtn,
-                        medioPago === medio ? styles.medioBtnActivo : null,
-                      ]}
-                      onPress={() => setMedioPago(medio)}
-                    >
-                      <Text style={[styles.medioBtnTexto, medioPago === medio ? styles.medioBtnTextoActivo : null]}>
-                        {medio.toUpperCase()}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              <View style={{ gap: 6 }}>
-                <Text style={styles.label}>Fecha</Text>
-                <TextInput
-                  style={styles.input}
-                  value={fechaPago}
-                  onChangeText={setFechaPago}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={COLORS.textMuted}
-                />
-              </View>
-
-              <View style={{ gap: 6 }}>
-                <Text style={styles.label}>Notas / Observaciones</Text>
-                <TextInput
-                  style={styles.input}
-                  value={notasPago}
-                  onChangeText={setNotasPago}
-                  placeholder="Ej. Nro comprobante, seña, etc."
-                  placeholderTextColor={COLORS.textMuted}
-                />
-              </View>
-
-              <TouchableOpacity style={styles.btnGuardarPago} onPress={handleGuardarPago}>
-                <Text style={styles.btnGuardarPagoTexto}>Guardar Pago</Text>
+            {/* Crear nueva categoría */}
+            <View style={styles.crearBox}>
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                placeholder="Nueva categoría..."
+                placeholderTextColor={COLORS.textMuted}
+                value={nuevaCategoriaNombre}
+                onChangeText={setNuevaCategoriaNombre}
+              />
+              <TouchableOpacity style={styles.crearBtn} onPress={handleCrearCategoria}>
+                <Text style={styles.crearBtnText}>Agregar ➕</Text>
               </TouchableOpacity>
+            </View>
+
+            {/* Lista scrollable de categorías */}
+            <ScrollView style={styles.categoriasList} showsVerticalScrollIndicator={false}>
+              {categoriasGasto.map((cat) => {
+                const isEditing = editandoCategoriaId === cat.id;
+
+                return (
+                  <View key={cat.id} style={[styles.categoriaRow, cat.activa === 0 && styles.categoriaRowInactiva]}>
+                    {isEditing ? (
+                      <View style={styles.editRow}>
+                        <TextInput
+                          style={[styles.input, { flex: 1, height: 38 }]}
+                          value={editandoCategoriaNombre}
+                          onChangeText={setEditandoCategoriaNombre}
+                          autoFocus
+                        />
+                        <TouchableOpacity 
+                          style={styles.saveInlineBtn} 
+                          onPress={() => handleGuardarEdicion(cat.id)}
+                        >
+                          <Text style={styles.saveInlineText}>OK</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={styles.cancelInlineBtn} 
+                          onPress={() => {
+                            setEditandoCategoriaId(null);
+                            setEditandoCategoriaNombre('');
+                          }}
+                        >
+                          <Text style={styles.cancelInlineText}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <View style={styles.displayRow}>
+                        <Text style={[styles.categoriaNombre, cat.activa === 0 && styles.categoriaNombreInactiva]}>
+                          {cat.nombre} {cat.activa === 0 ? ' (Inactiva)' : ''}
+                        </Text>
+                        
+                        <View style={styles.rowActions}>
+                          <TouchableOpacity
+                            style={styles.actionBtnSmall}
+                            onPress={() => {
+                              setEditandoCategoriaId(cat.id);
+                              setEditandoCategoriaNombre(cat.nombre);
+                            }}
+                          >
+                            <Text style={{ fontSize: 14 }}>✏️</Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={styles.actionBtnSmall}
+                            onPress={() => handleToggleActiva(cat.id, cat.activa)}
+                          >
+                            <Text style={{ fontSize: 14 }}>
+                              {cat.activa === 1 ? '🟢' : '🔴'}
+                            </Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={[styles.actionBtnSmall, { backgroundColor: 'rgba(224, 90, 90, 0.12)', borderColor: 'rgba(224, 90, 90, 0.3)' }]}
+                            onPress={() => handleEliminarCategoria(cat.id, cat.nombre)}
+                          >
+                            <Text style={{ fontSize: 14 }}>🗑️</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
             </ScrollView>
+
+            <TouchableOpacity style={styles.cerrarModalBtn} onPress={() => setModalCategoriasVisible(false)}>
+              <Text style={styles.cerrarModalText}>Listo</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1143,5 +1214,113 @@ const styles = StyleSheet.create({
   errorRangoTexto: {
     color: COLORS.danger,
     fontSize: 12,
+  },
+  modalDesc: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  crearBox: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  crearBtn: {
+    backgroundColor: COLORS.accent,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  crearBtnText: {
+    color: '#000000',
+    fontWeight: 'bold',
+    fontSize: 13,
+  },
+  categoriasList: {
+    flex: 1,
+    marginBottom: 16,
+  },
+  categoriaRow: {
+    backgroundColor: COLORS.card,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  categoriaRowInactiva: {
+    opacity: 0.5,
+  },
+  editRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  saveInlineBtn: {
+    backgroundColor: COLORS.success,
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  saveInlineText: {
+    color: COLORS.text,
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
+  cancelInlineBtn: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  cancelInlineText: {
+    color: COLORS.textMuted,
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
+  displayRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  categoriaNombre: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '600',
+    flex: 1,
+  },
+  categoriaNombreInactiva: {
+    color: COLORS.textMuted,
+    textDecorationLine: 'line-through',
+  },
+  rowActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionBtnSmall: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cerrarModalBtn: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  cerrarModalText: {
+    color: COLORS.text,
+    fontWeight: 'bold',
   },
 });

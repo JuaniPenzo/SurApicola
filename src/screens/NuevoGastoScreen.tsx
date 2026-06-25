@@ -23,10 +23,9 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { TabParamList } from '../navigation/AppNavigator';
 import { useSQLiteContext } from 'expo-sqlite';
 import { getCategoriasGasto } from '../database/gastos';
-import { getProveedoresActivos } from '../database/proveedores';
 import { useGastos } from '../hooks/useGastos';
 import { formatearDinero, fechaHoy } from '../utils/format';
-import type { CategoriaGasto, Proveedor, MedioPago } from '../types';
+import type { CategoriaGasto, MedioPago } from '../types';
 
 const COLORS = {
   bg: '#0F0F1A',
@@ -48,29 +47,22 @@ export function NuevoGastoScreen() {
 
   // ── Datos de Referencia (SQLite) ───────────────────────────────────────────
   const [categorias, setCategorias] = useState<CategoriaGasto[]>([]);
-  const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [loadingCats, setLoadingCats] = useState(false);
-  const [loadingProvs, setLoadingProvs] = useState(false);
 
   // ── Campos del Gasto ───────────────────────────────────────────────────────
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<CategoriaGasto | null>(null);
-  const [proveedorSeleccionado, setProveedorSeleccionado] = useState<Proveedor | null>(null);
   const [fecha, setFecha] = useState(fechaHoy());
   const [descripcion, setDescripcion] = useState('');
   const [totalPesos, setTotalPesos] = useState('');
   const [notas, setNotas] = useState('');
 
-  // Campos de Pago Inicial
-  const [montoPagadoPesos, setMontoPagadoPesos] = useState('');
+  // Medio de Pago (Requerido ya que se paga completo)
   const [medioPago, setMedioPago] = useState<MedioPago>('efectivo');
-  const [notasPago, setNotasPago] = useState('');
 
   // ── Modales de Selección ───────────────────────────────────────────────────
   const [catModalVisible, setCatModalVisible] = useState(false);
-  const [provModalVisible, setProvModalVisible] = useState(false);
-  const [searchProveedor, setSearchProveedor] = useState('');
 
-  // Cargar categorías y proveedores
+  // Cargar categorías
   const loadReferenceData = async () => {
     try {
       setLoadingCats(true);
@@ -81,38 +73,23 @@ export function NuevoGastoScreen() {
     } finally {
       setLoadingCats(false);
     }
-
-    try {
-      setLoadingProvs(true);
-      const provs = await getProveedoresActivos(db, searchProveedor);
-      setProveedores(provs);
-    } catch (err) {
-      console.error('[NuevoGastoScreen] Error al cargar proveedores:', err);
-    } finally {
-      setLoadingProvs(false);
-    }
   };
 
   const resetForm = () => {
     setCategoriaSeleccionada(null);
-    setProveedorSeleccionado(null);
     setFecha(fechaHoy());
     setDescripcion('');
     setTotalPesos('');
     setNotas('');
-    setMontoPagadoPesos('');
     setMedioPago('efectivo');
-    setNotasPago('');
-    setSearchProveedor('');
   };
 
   useFocusEffect(
     React.useCallback(() => {
       loadReferenceData();
       resetForm();
-    }, [searchProveedor])
+    }, [])
   );
-
 
   // ── Guardar Gasto ──────────────────────────────────────────────────────────
   const handleGuardar = async () => {
@@ -134,30 +111,17 @@ export function NuevoGastoScreen() {
 
     const totalCentavos = Math.round(totalPesosNum * 100);
 
-    // Pago inicial
-    const pagoInicialPesosNum = montoPagadoPesos ? parseFloat(montoPagadoPesos) : 0;
-    if (isNaN(pagoInicialPesosNum) || pagoInicialPesosNum < 0) {
-      Alert.alert('Validación', 'El pago inicial debe ser mayor o igual a cero.');
-      return;
-    }
-
-    const pagoInicialCentavos = Math.round(pagoInicialPesosNum * 100);
-    if (pagoInicialCentavos > totalCentavos) {
-      Alert.alert('Validación', 'El pago inicial no puede ser mayor que el costo total del gasto.');
-      return;
-    }
-
     try {
       await crearGasto({
         categoria_id: categoriaSeleccionada.id,
-        proveedor_id: proveedorSeleccionado ? proveedorSeleccionado.id : null,
+        proveedor_id: null,
         fecha,
         descripcion: descripcion.trim(),
         total_centavos: totalCentavos,
         notas: notas.trim() || null,
-        monto_pagado: pagoInicialCentavos,
-        medio_pago: pagoInicialCentavos > 0 ? medioPago : null,
-        notas_pago: pagoInicialCentavos > 0 ? (notasPago.trim() || null) : null,
+        monto_pagado: totalCentavos, // Pagado en su totalidad
+        medio_pago: medioPago,
+        notas_pago: 'Gasto operativo registrado',
       });
 
       Alert.alert('Éxito', 'Gasto operativo registrado correctamente.', [
@@ -183,7 +147,7 @@ export function NuevoGastoScreen() {
       {/* Advertencia Gastos vs Compras */}
       <View style={styles.advertenciaBanner}>
         <Text style={styles.advertenciaTexto}>
-          ℹ️ Las compras de miel, panal y envases se cargan desde el módulo de Compras, no desde Gastos.
+          ℹ️ Los gastos son egresos operativos. Las compras de miel, panal, envases o insumos deben cargarse desde Compras.
         </Text>
       </View>
 
@@ -195,7 +159,7 @@ export function NuevoGastoScreen() {
           
           {/* Clasificación */}
           <View style={styles.seccionCard}>
-            <Text style={styles.seccionTitulo}>CLASIFICACIÓN Y PROVEEDOR</Text>
+            <Text style={styles.seccionTitulo}>CLASIFICACIÓN</Text>
             
             {/* Categoría */}
             <Text style={styles.label}>Categoría de Gasto *</Text>
@@ -209,29 +173,6 @@ export function NuevoGastoScreen() {
               </Text>
               <Text style={styles.selectorIcon}>▼</Text>
             </TouchableOpacity>
-
-            {/* Proveedor (Opcional) */}
-            <Text style={[styles.label, { marginTop: 6 }]}>Proveedor (Opcional)</Text>
-            <View style={styles.provSelectorRow}>
-              <TouchableOpacity
-                style={[styles.selectorBtn, { flex: 1 }]}
-                activeOpacity={0.7}
-                onPress={() => setProvModalVisible(true)}
-              >
-                <Text style={proveedorSeleccionado ? styles.selectorText : styles.selectorPlaceholder}>
-                  {proveedorSeleccionado ? proveedorSeleccionado.nombre : 'Vincular proveedor...'}
-                </Text>
-                <Text style={styles.selectorIcon}>▼</Text>
-              </TouchableOpacity>
-              {proveedorSeleccionado && (
-                <TouchableOpacity
-                  style={styles.btnLimpiarProv}
-                  onPress={() => setProveedorSeleccionado(null)}
-                >
-                  <Text style={styles.btnLimpiarProvTexto}>✕</Text>
-                </TouchableOpacity>
-              )}
-            </View>
 
             {/* Fecha */}
             <View style={{ gap: 6, marginTop: 6 }}>
@@ -257,7 +198,7 @@ export function NuevoGastoScreen() {
                 style={styles.input}
                 value={descripcion}
                 onChangeText={setDescripcion}
-                placeholder="Ej. Compra 200 envases plásticos 1kg"
+                placeholder="Ej. Carga combustible camioneta"
                 placeholderTextColor={COLORS.textMuted}
               />
             </View>
@@ -290,54 +231,26 @@ export function NuevoGastoScreen() {
             </View>
           </View>
 
-          {/* Pago Inicial (Opcional) */}
+          {/* Medio de Pago */}
           <View style={styles.seccionCard}>
-            <Text style={styles.seccionTitulo}>PAGO INICIAL (OPCIONAL)</Text>
+            <Text style={styles.seccionTitulo}>MEDIO DE PAGO *</Text>
             
-            <View style={{ gap: 6 }}>
-              <Text style={styles.label}>Monto abonado ahora (ARS)</Text>
-              <TextInput
-                style={styles.input}
-                value={montoPagadoPesos}
-                onChangeText={setMontoPagadoPesos}
-                keyboardType="numeric"
-                placeholder="Ej: 500 (dejar vacío si queda pendiente)"
-                placeholderTextColor={COLORS.textMuted}
-              />
+            <View style={styles.medioRow}>
+              {(['efectivo', 'transferencia', 'otro'] as MedioPago[]).map((medio) => (
+                <TouchableOpacity
+                  key={medio}
+                  style={[
+                    styles.medioBtn,
+                    medioPago === medio ? styles.medioBtnActivo : null,
+                  ]}
+                  onPress={() => setMedioPago(medio)}
+                >
+                  <Text style={[styles.medioBtnTexto, medioPago === medio ? styles.medioBtnTextoActivo : null]}>
+                    {medio.toUpperCase()}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
-
-            {montoPagadoPesos && parseFloat(montoPagadoPesos) > 0 ? (
-              <>
-                <Text style={[styles.label, { marginTop: 12 }]}>Medio de Pago</Text>
-                <View style={styles.medioRow}>
-                  {(['efectivo', 'transferencia', 'otro'] as MedioPago[]).map((medio) => (
-                    <TouchableOpacity
-                      key={medio}
-                      style={[
-                        styles.medioBtn,
-                        medioPago === medio ? styles.medioBtnActivo : null,
-                      ]}
-                      onPress={() => setMedioPago(medio)}
-                    >
-                      <Text style={[styles.medioBtnTexto, medioPago === medio ? styles.medioBtnTextoActivo : null]}>
-                        {medio.toUpperCase()}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                <View style={{ marginTop: 12, gap: 6 }}>
-                  <Text style={styles.label}>Notas del Pago</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={notasPago}
-                    onChangeText={setNotasPago}
-                    placeholder="Ej. Seña con transferencia bancaria..."
-                    placeholderTextColor={COLORS.textMuted}
-                  />
-                </View>
-              </>
-            ) : null}
           </View>
 
           {/* Botón Guardar */}
@@ -393,73 +306,7 @@ export function NuevoGastoScreen() {
                 ListEmptyComponent={
                   <View style={styles.modalVacioContainer}>
                     <Text style={styles.modalVacioTexto}>
-                      No hay categorías activas.{'\n'}Creá una desde{'\n'}⚙️ Configuración → Categorías de Gasto.
-                    </Text>
-                  </View>
-                }
-              />
-            )}
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal: Proveedor */}
-      <Modal
-        visible={provModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setProvModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalHeaderTitulo}>Vincular Proveedor</Text>
-              <TouchableOpacity
-                onPress={() => setProvModalVisible(false)}
-                style={styles.modalCerrarBtn}
-              >
-                <Text style={styles.modalCerrarBtnTexto}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.modalSearchContainer}>
-              <TextInput
-                style={styles.modalSearchInput}
-                placeholder="Buscar proveedor..."
-                placeholderTextColor={COLORS.textMuted}
-                value={searchProveedor}
-                onChangeText={setSearchProveedor}
-                clearButtonMode="while-editing"
-              />
-            </View>
-
-            {loadingProvs ? (
-              <View style={styles.modalCentrado}>
-                <ActivityIndicator size="large" color={COLORS.accent} />
-              </View>
-            ) : (
-              <FlatList
-                data={proveedores}
-                keyExtractor={(item) => item.id.toString()}
-                renderItem={({ item }: { item: Proveedor }) => (
-                  <TouchableOpacity
-                    style={styles.modalItemRow}
-                    onPress={() => {
-                      setProveedorSeleccionado(item);
-                      setProvModalVisible(false);
-                      setSearchProveedor('');
-                    }}
-                  >
-                    <Text style={styles.modalItemNombre}>{item.nombre}</Text>
-                    {item.telefono && (
-                      <Text style={styles.modalItemSub}>{item.telefono}</Text>
-                    )}
-                  </TouchableOpacity>
-                )}
-                ListEmptyComponent={
-                  <View style={styles.modalVacioContainer}>
-                    <Text style={styles.modalVacioTexto}>
-                      No se encontraron proveedores activos.
+                      No hay categorías activas.{'\n'}Creá una desde{'\n'}📤 Gastos → Categorías.
                     </Text>
                   </View>
                 }

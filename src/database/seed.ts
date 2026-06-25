@@ -57,11 +57,15 @@ const PRESENTACIONES_SEED = [
 // ---------------------------------------------------------------------------
 
 const CATEGORIAS_GASTO_SEED = [
-  'Nafta / Combustible',
-  'Envases',
-  'Etiquetas',
-  'Reparaciones',
+  'Combustible',
+  'Flete',
+  'Mantenimiento',
+  'Alquiler',
   'Servicios',
+  'Herramientas',
+  'Sueldos',
+  'Viáticos',
+  'Limpieza',
   'Otros',
 ] as const;
 

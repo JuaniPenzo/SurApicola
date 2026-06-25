@@ -312,11 +312,11 @@ export async function cargarDatosPrueba(db: SQLiteDatabase): Promise<void> {
 
   console.log('[DevSeed] Cargando gastos operativos...');
   // 9. Gastos Operativos (5)
-  // Gasto 1: Nafta - Combustibles Ruta 3 - $18.000 - 2026-06-04 (Pagado completo)
+  // Gasto 1: Combustible - $18.000 - 2026-06-04 (Pagado completo)
   const g1 = await db.runAsync(
     `INSERT INTO gastos_operativos (proveedor_id, categoria_id, fecha, descripcion, total_centavos, estado, notas)
-     VALUES (?, ?, '2026-06-04', 'Carga nafta camioneta', 1800000, 'pagado', 'Cargado para reparto zona centro')`,
-    [proveedorIds[2], getCatId('Nafta / Combustible')]
+     VALUES (NULL, ?, '2026-06-04', 'Carga nafta camioneta', 1800000, 'pagado', 'Cargado para reparto zona centro')`,
+    [getCatId('Combustible')]
   );
   await db.runAsync(
     `INSERT INTO pagos_gasto (gasto_id, fecha, monto_centavos, medio_pago, notas, anulado)
@@ -324,30 +324,35 @@ export async function cargarDatosPrueba(db: SQLiteDatabase): Promise<void> {
     [g1.lastInsertRowId]
   );
 
-  // Gasto 2: Envases de plástico - Envases Plásticos S.A. - $35.000 - 2026-06-06 (Pagado parcial $15.000)
+  // Gasto 2: Flete - $35.000 - 2026-06-06 (Pagado completo)
   const g2 = await db.runAsync(
     `INSERT INTO gastos_operativos (proveedor_id, categoria_id, fecha, descripcion, total_centavos, estado, notas)
-     VALUES (?, ?, '2026-06-06', 'Compra de potes de miel 500g', 3500000, 'parcial', 'Suministro de packaging')`,
-    [proveedorIds[1], getCatId('Envases')]
+     VALUES (NULL, ?, '2026-06-06', 'Flete traslado colmenas', 3500000, 'pagado', 'Servicio de flete contratado')`,
+    [getCatId('Flete')]
   );
   await db.runAsync(
     `INSERT INTO pagos_gasto (gasto_id, fecha, monto_centavos, medio_pago, notas, anulado)
-     VALUES (?, '2026-06-06', 1500000, 'transferencia', 'Seña transferencia', 0)`,
+     VALUES (?, '2026-06-06', 3500000, 'transferencia', 'Pago flete transferencia', 0)`,
     [g2.lastInsertRowId]
   );
 
-  // Gasto 3: Etiquetas - $8.500 - 2026-06-09 (Pendiente)
-  await db.runAsync(
+  // Gasto 3: Alquiler - $8.500 - 2026-06-09 (Pagado completo)
+  const g3 = await db.runAsync(
     `INSERT INTO gastos_operativos (proveedor_id, categoria_id, fecha, descripcion, total_centavos, estado, notas)
-     VALUES (NULL, ?, '2026-06-09', 'Impresión etiquetas adhesivas de marca', 850000, 'pendiente', 'A pagar al retirar de imprenta')`,
-    [getCatId('Etiquetas')]
+     VALUES (NULL, ?, '2026-06-09', 'Alquiler del galpón de extracción', 850000, 'pagado', 'Alquiler correspondiente a junio')`,
+    [getCatId('Alquiler')]
+  );
+  await db.runAsync(
+    `INSERT INTO pagos_gasto (gasto_id, fecha, monto_centavos, medio_pago, notas, anulado)
+     VALUES (?, '2026-06-09', 850000, 'transferencia', 'Pago alquiler transferencia', 0)`,
+    [g3.lastInsertRowId]
   );
 
-  // Gasto 4: Reparaciones - $25.000 - 2026-06-11 (Pagado completo)
+  // Gasto 4: Mantenimiento - $25.000 - 2026-06-11 (Pagado completo)
   const g4 = await db.runAsync(
     `INSERT INTO gastos_operativos (proveedor_id, categoria_id, fecha, descripcion, total_centavos, estado, notas)
      VALUES (NULL, ?, '2026-06-11', 'Arreglo motor de centrífuga', 2500000, 'pagado', 'Trabajo del taller mecánico local')`,
-    [getCatId('Reparaciones')]
+    [getCatId('Mantenimiento')]
   );
   await db.runAsync(
     `INSERT INTO pagos_gasto (gasto_id, fecha, monto_centavos, medio_pago, notas, anulado)
